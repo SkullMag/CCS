@@ -126,17 +126,6 @@ class MaskDetectorThread(QtCore.QThread):
 
         vs.stop() 
 
-class RecognitionWindow(QtWidgets.QMainWindow):
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-
-        # self.show_video_thread = VideoThread()
-        # self.show_video_thread.changePixmap.connect(self.changePixmap)
-        # self.show_video_thread.start()
-        self.gridLayout.addWidget(self.video_label, 1, 0, 1, 1)
-        self.centralWidget.setLayout(self.gridLayout)
-        self.setCentralWidget(self.centralWidget)
-
 class MaskAndFaceRecognitionWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -144,6 +133,7 @@ class MaskAndFaceRecognitionWindow(QtWidgets.QMainWindow):
         self.centralWidget = QtWidgets.QWidget()
         self.gridLayout = QtWidgets.QGridLayout()
         self.video_label = QtWidgets.QLabel()
+        self.setStyleSheet("background-color: black")
 
         self.mask_status_label = QtWidgets.QLabel()
         self.mask_status_label.setAlignment(QtCore.Qt.AlignCenter)
@@ -174,11 +164,14 @@ class MaskAndFaceRecognitionWindow(QtWidgets.QMainWindow):
 
     def change_mask_status(self, mask):
         if mask:
-            self.mask_status_label.setText("Поднесите руку к термометру")
-            self.mask_status_label.setStyleSheet("color: green")
             if self.person_name:
+                self.mask_status_label.setText("Поднесите руку к термометру")
+                self.mask_status_label.setStyleSheet("color: green")
                 self.status_bar.setValue(50)
                 self.update()
+            else:
+                self.mask_status_label.setText("Лицо не было распознано")
+                self.mask_status_label.setStyleSheet("color: red")
             self.mask_is_on = True
         else:
             self.mask_status_label.setText("Пожалуйста наденьте маску")
@@ -218,40 +211,25 @@ class Main(QtWidgets.QMainWindow):
 
         self.centralWidget = QtWidgets.QWidget()
         self.gridLayout = QtWidgets.QGridLayout()
-        self.video_label = QtWidgets.QLabel()
-        self.mask_status_label = QtWidgets.QLabel()
-        self.mask_status_label.setAlignment(QtCore.Qt.AlignCenter)
-        font = QtGui.QFont()
-        font.setPointSize(24)
-        self.mask_status_label.setFont(font)
-        self.gridLayout.addWidget(self.video_label, 1, 0, 1, 1)
-        self.gridLayout.addWidget(self.mask_status_label, 0, 0, 1, 1)
+
+        self.mask_and_face_button = QtWidgets.QPushButton()
+        self.mask_and_face_button.setText("Распознавание маски и лица")
+        self.mask_and_face_button.clicked.connect(MaskAndFaceRecognitionWindow(self).show)
+        self.mask_and_face_button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+
+        self.mask_button = QtWidgets.QPushButton()
+        self.mask_button.setText("Распознавание маски")
+        self.mask_button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+
+        self.gridLayout.addWidget(self.mask_and_face_button, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.mask_button, 1, 0, 1, 1)
+
         self.centralWidget.setLayout(self.gridLayout)
         self.setCentralWidget(self.centralWidget)
-
-        # self.mask_detector_thread = MaskDetectorThread()
-        # self.mask_detector_thread.detected.connect(self.change_mask_status)
-        # self.mask_detector_thread.frameChanged.connect(self.change_pixmap)
-        # self.mask_detector_thread.start()
-
-        # self.show_video_thread = VideoThread()
-        # self.show_video_thread.changePixmap.connect(self.change_pixmap)
-        # self.show_video_thread.start()
-
-    def change_pixmap(self, img):
-        self.video_label.setPixmap(QtGui.QPixmap.fromImage(img))
-
-    def change_mask_status(self, mask):
-        if mask:
-            self.mask_status_label.setText("Маска обнаружена")
-            self.mask_status_label.setStyleSheet("color: green")
-        else:
-            self.mask_status_label.setText("Пожалуйста наденьте маску")
-            self.mask_status_label.setStyleSheet("color: red")
 
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    main = MaskAndFaceRecognitionWindow()
+    main = Main()
     main.show()
     app.exec()
