@@ -133,7 +133,6 @@ class MaskAndFaceRecognitionWindow(QtWidgets.QMainWindow):
         self.centralWidget = QtWidgets.QWidget()
         self.gridLayout = QtWidgets.QGridLayout()
         self.video_label = QtWidgets.QLabel()
-        self.setStyleSheet("background-color: black")
 
         self.mask_status_label = QtWidgets.QLabel()
         self.mask_status_label.setAlignment(QtCore.Qt.AlignCenter)
@@ -212,17 +211,24 @@ class Main(QtWidgets.QMainWindow):
         self.centralWidget = QtWidgets.QWidget()
         self.gridLayout = QtWidgets.QGridLayout()
 
+        self.ccs_label = QtWidgets.QLabel()
+        self.ccs_label.setText("CCS - Covid Control System")
+        font = QtGui.QFont()
+        font.setPointSize(24)
+        font.setBold(True)
+        self.ccs_label.setFont(font)
+        self.ccs_label.setAlignment(QtCore.Qt.AlignCenter)
+
         self.mask_and_face_button = QtWidgets.QPushButton()
         self.mask_and_face_button.setText("Распознавание маски и лица")
         self.mask_and_face_button.clicked.connect(MaskAndFaceRecognitionWindow(self).show)
         self.mask_and_face_button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        font.setPointSize(16)
+        font.setBold(False)
+        self.mask_and_face_button.setFont(font)
 
-        self.mask_button = QtWidgets.QPushButton()
-        self.mask_button.setText("Распознавание маски")
-        self.mask_button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-
-        self.gridLayout.addWidget(self.mask_and_face_button, 0, 0, 1, 1)
-        self.gridLayout.addWidget(self.mask_button, 1, 0, 1, 1)
+        self.gridLayout.addWidget(self.ccs_label, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.mask_and_face_button, 1, 0, 1, 1)
 
         self.centralWidget.setLayout(self.gridLayout)
         self.setCentralWidget(self.centralWidget)
@@ -231,5 +237,6 @@ class Main(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     main = Main()
-    main.show()
+    main.setWindowState(QtCore.Qt.WindowFullScreen)
+    main.showFullScreen()
     app.exec()
