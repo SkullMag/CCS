@@ -59,7 +59,7 @@ maskNet = load_model("mask_detector.model")
 class MaskDetectorThread(QtCore.QThread):
     detected = QtCore.pyqtSignal("PyQt_PyObject")
     frameChanged = QtCore.pyqtSignal(QtGui.QImage)
-    faceRecognized = QtCore.pyqtSignal("PyQt_PyObject")
+    faceRecognized = QtCore.pyqtSignal(tuple)
     faceCount = QtCore.pyqtSignal(int)
     fps = QtCore.pyqtSignal(float)
 
@@ -85,7 +85,6 @@ class MaskDetectorThread(QtCore.QThread):
         while True:
             start = time.time()
             frame = vs.read()
-            # frame = imutils.resize(frame, width=400)
             rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             rgbImage = cv2.flip(rgbImage, 1)
             h, w, ch = rgbImage.shape
@@ -93,12 +92,14 @@ class MaskDetectorThread(QtCore.QThread):
             convertToQtFormat = QtGui.QImage(rgbImage.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
             p = convertToQtFormat.scaled(640, 480, QtCore.Qt.KeepAspectRatio)
             self.frameChanged.emit(p)
+            # frame = imutils.resize(frame, width=400)
 
             (locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
-
+            self.mask_is_on = False
             for (box, pred) in zip(locs, preds):
                 (mask, withoutMask) = pred
-                self.detected.emit(mask > withoutMask)
+                self.mask_is_on = mask > withoutMask
+                self.detected.emit(self.mask_is_on)
             if process_this_frame:
                 small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
                 rgb_small_frame = small_frame[:, :, ::-1]
@@ -106,18 +107,26 @@ class MaskDetectorThread(QtCore.QThread):
                 face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
 
                 face_names = []
-                if len(face_encodings):
-                    face_encoding = face_encodings[0]
-                    # See if the face is a match for the known face(s)
-                    matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
-                    name = ""
+                try:
+                    if len(face_encodings):
+                        face_encoding = face_encodings[0]
+                        # See if the face is a match for the known face(s)
+                        matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
+                        name = ""
 
-                    # If a match was found in known_face_encodings, just use the first one.
-                    if True in matches:
-                        first_match_index = matches.index(True)
-                        name = self.known_face_names[first_match_index]
+                        # If a match was found in known_face_encodings, just use the first one.
+                        # if True in matches:
+                        #     first_match_index = matches.index(True)
+                        #     name = self.known_face_names[first_match_index]
+                        face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
+                        best_match_index = np.argmin(face_distances)
+                        if matches[best_match_index]:
+                            name = self.known_face_names[best_match_index]
 
-                    self.faceRecognized.emit(name)
+                        self.faceRecognized.emit((name, self.mask_is_on))
+                except Exception as e:
+                    print(e)
+                    
             process_this_frame = not process_this_frame
             end = time.time()
             self.faceCount.emit(len(face_encodings))
@@ -133,6 +142,7 @@ class MaskAndFaceRecognitionWindow(QtWidgets.QMainWindow):
         self.centralWidget = QtWidgets.QWidget()
         self.gridLayout = QtWidgets.QGridLayout()
         self.video_label = QtWidgets.QLabel()
+        self.video_label.setAlignment(QtCore.Qt.AlignCenter)
 
         self.mask_status_label = QtWidgets.QLabel()
         self.mask_status_label.setAlignment(QtCore.Qt.AlignCenter)
@@ -142,10 +152,10 @@ class MaskAndFaceRecognitionWindow(QtWidgets.QMainWindow):
 
         self.status_bar = QtWidgets.QProgressBar()
 
-        self.mask_is_on = False
         self.person_name = None
         self.no_face_count = 0
         self.fps = 0
+        self.mask_is_on = False
 
         self.mask_detector_thread = MaskDetectorThread()
         self.mask_detector_thread.detected.connect(self.change_mask_status)
@@ -163,37 +173,40 @@ class MaskAndFaceRecognitionWindow(QtWidgets.QMainWindow):
 
     def change_mask_status(self, mask):
         if mask:
-            if self.person_name:
-                self.mask_status_label.setText("Поднесите руку к термометру")
-                self.mask_status_label.setStyleSheet("color: green")
-                self.status_bar.setValue(50)
-                self.update()
-            else:
-                self.mask_status_label.setText("Лицо не было распознано")
-                self.mask_status_label.setStyleSheet("color: red")
+            self.mask_status_label.setText("Спустите маску для идентификации")
+            self.mask_status_label.setStyleSheet("color: green")
+            self.status_bar.setValue(33.3)
             self.mask_is_on = True
+            self.update()
         else:
-            self.mask_status_label.setText("Пожалуйста наденьте маску")
-            self.mask_status_label.setStyleSheet("color: red")
-            self.mask_is_on = False
-            self.status_bar.setValue(0)
+            if not self.mask_is_on:
+                self.mask_status_label.setText("Наденьте маску")
+                self.mask_status_label.setStyleSheet("color: red")
+                self.status_bar.setValue(0)
 
     def change_pixmap(self, image):
         self.video_label.setPixmap(QtGui.QPixmap.fromImage(image))
 
-    def face_recognized(self, name):
+    def face_recognized(self, name_mask):
+        name, mask = name_mask
         if name:
             self.person_name = name
+        if self.mask_is_on and self.person_name and not mask:
+            self.status_bar.setValue(66.6)
+            self.mask_status_label.setText("Поднесите руку к термометру")
 
     def face_count(self, count):
         if not count:
             self.no_face_count += 1
-            if self.no_face_count >= 10 * self.fps:
+            if self.no_face_count >= 5 * self.fps:
                 self.status_bar.setValue(0)
                 self.no_face_count = 0
+                self.mask_is_on = False
                 self.person_name = ""
+                self.mask_status_label.setText("Наденьте маску")
+                self.mask_status_label.setStyleSheet("color: red;")
         else:
-            self.not_face_count = 0
+            self.no_face_count = 0
 
     def set_fps(self, fps):
         if fps:
@@ -237,6 +250,7 @@ class Main(QtWidgets.QMainWindow):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     main = Main()
-    main.setWindowState(QtCore.Qt.WindowFullScreen)
-    main.showFullScreen()
+    # main.setWindowState(QtCore.Qt.WindowFullScreen)
+    # main.showFullScreen()
+    main.show()
     app.exec()
