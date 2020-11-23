@@ -104,6 +104,8 @@ class MaskAndFaceDetectorThread(QtCore.QThread):
             if not self.identificate:
                 end = time.time()
                 self.fps.emit(1 / (end - start))
+                if not len(locs):
+                    self.detected.emit(False)
                 continue
             if process_this_frame:
                 small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
