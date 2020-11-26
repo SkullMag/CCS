@@ -238,8 +238,7 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
                 self.no_face_count = 0
                 self.mask_is_on = False
                 self.person_name = ""
-                self.mask_status_label.setText("Наденьте маску")
-                print(1)
+                self.mask_status_label.setText("")
         else:
             self.no_face_count = 0
 
