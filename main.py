@@ -57,8 +57,7 @@ faceNet = cv2.dnn.readNet(prototxtPath, weightsPath)
 maskNet = load_model("mask_detector.model")
 
 class MaskAndFaceDetectorThread(QtCore.QThread):
-    detected = QtCore.pyqtSignal("PyQt_PyObject")
-    frameChanged = QtCore.pyqtSignal(QtGui.QImage)
+    maskDetected = QtCore.pyqtSignal("PyQt_PyObject")
     faceRecognized = QtCore.pyqtSignal(tuple)
     faceCount = QtCore.pyqtSignal(int)
     fps = QtCore.pyqtSignal(float)
@@ -81,38 +80,33 @@ class MaskAndFaceDetectorThread(QtCore.QThread):
             
     def run(self):
         self.is_running = True
-        vs = VideoStream(src=0).start()
+        cam = cv2.VideoCapture(0)
+        for _ in range(20):
+            cam.read()
         process_this_frame = True
 
         while self.is_running:
             start = time.time()
-            frame = vs.read()
-            rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            rgbImage = cv2.flip(rgbImage, 1)
-            h, w, ch = rgbImage.shape
-            bytesPerLine = ch * w
-            convertToQtFormat = QtGui.QImage(rgbImage.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
-            p = convertToQtFormat.scaled(640, 480, QtCore.Qt.KeepAspectRatio)
-            self.frameChanged.emit(p)
-
+            ret, frame = cam.read()
+            
             (locs, preds) = detect_and_predict_mask(frame, faceNet, maskNet)
             self.mask_is_on = False
             for (box, pred) in zip(locs, preds):
                 (mask, withoutMask) = pred
                 self.mask_is_on = mask > withoutMask
-                self.detected.emit(self.mask_is_on)
+                self.maskDetected.emit(self.mask_is_on)
             if not self.identificate:
                 end = time.time()
                 self.fps.emit(1 / (end - start))
                 if not len(locs):
-                    self.detected.emit(False)
+                    self.maskDetected.emit(False)
                 continue
             if process_this_frame:
                 small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
                 rgb_small_frame = small_frame[:, :, ::-1]
                 face_locations = face_recognition.face_locations(rgb_small_frame)
-                face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
 
+                face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
                 face_names = []
                 try:
                     if len(face_encodings):
@@ -136,10 +130,9 @@ class MaskAndFaceDetectorThread(QtCore.QThread):
                     
             process_this_frame = not process_this_frame
             end = time.time()
-            self.faceCount.emit(len(face_encodings))
+            self.faceCount.emit(len(face_encodings) or len(locs))
             if len(face_encodings):
                 self.fps.emit(1 / (end - start))
-        vs.stop()
 
 
 class DetectionWindow(QtWidgets.QMainWindow):
@@ -151,6 +144,10 @@ class DetectionWindow(QtWidgets.QMainWindow):
 
         self.video_label = QtWidgets.QLabel()
         self.video_label.setAlignment(QtCore.Qt.AlignCenter)
+
+        self.video_thread = VideoThread()
+        self.video_thread.frameChanged.connect(self.change_pixmap)
+        self.video_thread.start() 
 
         self.mask_status_label = QtWidgets.QLabel()
         self.mask_status_label.setAlignment(QtCore.Qt.AlignCenter)
@@ -178,6 +175,26 @@ class DetectionWindow(QtWidgets.QMainWindow):
         event.accept()
 
 
+class VideoThread(QtCore.QThread):
+    frameChanged = QtCore.pyqtSignal(QtGui.QImage)
+    is_running = False
+
+    def run(self):
+        self.is_running = True
+        cam = cv2.VideoCapture(0)
+        for _ in range(20):
+            cam.read()
+        while self.is_running:
+            ret, frame = cam.read()
+            rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            rgbImage = cv2.flip(rgbImage, 1)
+            h, w, ch = rgbImage.shape
+            bytesPerLine = ch * w
+            convertToQtFormat = QtGui.QImage(rgbImage.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
+            p = convertToQtFormat.scaled(640, 480, QtCore.Qt.KeepAspectRatio)
+            self.frameChanged.emit(p)
+
+
 class MaskAndFaceRecognitionWindow(DetectionWindow):
     def __init__(self, parent=None):
         DetectionWindow.__init__(self, parent=parent)
@@ -187,8 +204,7 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
         self.fps = 0
 
         self.mask_and_face_detector_thread = MaskAndFaceDetectorThread()
-        self.mask_and_face_detector_thread.detected.connect(self.change_mask_status)
-        self.mask_and_face_detector_thread.frameChanged.connect(self.change_pixmap)
+        self.mask_and_face_detector_thread.maskDetected.connect(self.change_mask_status)
         self.mask_and_face_detector_thread.faceRecognized.connect(self.face_recognized)
         self.mask_and_face_detector_thread.faceCount.connect(self.face_count)
         self.mask_and_face_detector_thread.fps.connect(self.set_fps)
@@ -210,7 +226,7 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
         name, mask = name_mask
         if name:
             self.person_name = name
-        if self.mask_is_on and self.person_name and not mask:
+        if self.mask_is_on and not mask:
             self.status_bar.setValue(66.6)
             self.mask_status_label.setText("Поднесите руку к термометру")
 
@@ -223,7 +239,7 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
                 self.mask_is_on = False
                 self.person_name = ""
                 self.mask_status_label.setText("Наденьте маску")
-                self.mask_status_label.setStyleSheet("color: red;")
+                print(1)
         else:
             self.no_face_count = 0
 
