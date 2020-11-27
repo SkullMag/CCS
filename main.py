@@ -127,10 +127,6 @@ class MaskAndFaceDetectorThread(QtCore.QThread):
                             if True in matches:
                                 first_match_index = matches.index(True)
                                 name = self.known_face_names[first_match_index]
-                            #face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
-                            #best_match_index = np.argmin(face_distances)
-                            #if matches[best_match_index]:
-                            #    name = self.known_face_names[best_match_index]
 
                             self.faceRecognized.emit((name, self.mask_is_on))
                     except Exception as e:
@@ -246,7 +242,6 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
         self.mask_and_face_detector_thread.maskDetected.connect(self.change_mask_status)
         self.mask_and_face_detector_thread.faceRecognized.connect(self.face_recognized)
         self.mask_and_face_detector_thread.faceCount.connect(self.face_count)
-        #self.mask_and_face_detector_thread.frameChanged.connect(self.change_pixmap)
         self.mask_and_face_detector_thread.fps.connect(self.set_fps)
         self.mask_and_face_detector_thread.start()
 
@@ -315,7 +310,10 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
             self.status_bar.setValue(66)
             self.mask_and_face_detector_thread.identificate = True
             self.mask_status_label.setText("Поднесите руку к термометру")
-            self.person_name_label.setText(self.person_name)
+            if self.person_name:
+                self.person_name_label.setText(self.person_name)
+            else:
+                self.person_name_label.setText("Личность не идентифицирована")
 
     def face_count(self, count):
         if not count:
@@ -337,5 +335,4 @@ if __name__ == "__main__":
     main = MaskAndFaceRecognitionWindow()
     main.setWindowState(QtCore.Qt.WindowFullScreen)
     main.showFullScreen()
-   # main.show()
     app.exec()
