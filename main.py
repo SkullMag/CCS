@@ -224,6 +224,7 @@ class ObstacleDetectorThread(QtCore.QThread):
             state = o.get_obstacle_data()
             if state:
                 self.obstacleDetected.emit(state)
+            time.sleep(0.1)
 
 
 class MaskAndFaceRecognitionWindow(DetectionWindow):
@@ -250,11 +251,11 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
         self.obstacle_detector_thread.start()
 
     def reset(self):
-        self.status_bar.setValue(0)
         self.no_face_count = 0
         self.mask_is_on = False
         self.person_name = ""
         self.mask_status_label.setText("")
+        self.status_bar.setValue(0)
 
     def obstacle_detected(self, state):
         try:
@@ -264,12 +265,11 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
                 if 35.5 < temp < 37.5:
                     self.person_name_label.setText(f"{temp}") 
                     for _ in range(3):
+                        pixels.fill((0, 255, 0))
                         time.sleep(0.5)
-                        pixels.fill((0, 255, 0))
-                        time.sleep((0, 0, 0))
-                        pixels.fill((0, 255, 0))
+                        pixels.fill((0, 0, 0))
+                        time.sleep(0.5)
                     self.reset()
-                
         except Exception as e:
             print("[ERROR] No mlx90614 found")
             quit()
