@@ -1,9 +1,11 @@
+from ObstacleDetector import ObstacleDetector
 from PyQt5 import QtWidgets, QtCore, QtGui
 import sys
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.preprocessing.image import img_to_array
 from tensorflow.keras.models import load_model
 from imutils.video import VideoStream
+from mlx90614 import MLX90614
 import face_recognition
 import numpy as np
 import imutils
@@ -11,6 +13,11 @@ import time
 import glob
 import cv2
 import os
+import board
+import neopixel
+
+
+pixels = neopixel.NeoPixel(board.D18, 3)
 
 
 def detect_and_predict_mask(frame, faceNet, maskNet):
@@ -166,8 +173,8 @@ class DetectionWindow(QtWidgets.QMainWindow):
 
         self.gridLayout.addWidget(self.ccs_label, 0, 0, 1, 1)
         self.gridLayout.addWidget(self.status_bar, 1, 0, 1, 1)
-        self.gridLayout.addWidget(self.video_label, 2, 0, 2, 1)
-        self.gridLayout.addWidget(self.mask_status_label, 4, 0, 1, 1)
+        self.gridLayout.addWidget(self.video_label, 2, 0, 1, 1)
+        self.gridLayout.addWidget(self.mask_status_label, 3, 0, 1, 1)
 
         self.centralWidget.setLayout(self.gridLayout)
         self.setCentralWidget(self.centralWidget)
@@ -207,6 +214,17 @@ class VideoThread(QtCore.QThread):
             p = convertToQtFormat.scaled(w * 0.5, h * 0.5, QtCore.Qt.KeepAspectRatio)
             self.frameChanged.emit(p)
 
+class ObstacleDetectorThread(QtCore.QThread):
+    obstacleDetected = QtCore.pyqtSignal(int)
+    is_running = False
+
+    def run(self):
+        o = ObstacleDetector()
+        while self.is_running:
+            state = o.get_obstacle_data()
+            if state:
+                self.obstacleDetected.emit(state)
+
 
 class MaskAndFaceRecognitionWindow(DetectionWindow):
     def __init__(self, parent=None):
@@ -222,6 +240,40 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
         self.mask_and_face_detector_thread.faceCount.connect(self.face_count)
         self.mask_and_face_detector_thread.fps.connect(self.set_fps)
         self.mask_and_face_detector_thread.start()
+
+        self.person_name_label = QtWidgets.QLabel()
+
+        self.gridLayout.addWidget(self.person_name_label, 4, 0, 1, 1)
+
+        self.obstacle_detector_thread = ObstacleDetectorThread()
+        self.obstacle_detector_thread.obstacleDetected.connect(self.obstacle_detected)
+        self.obstacle_detector_thread.start()
+
+    def reset(self):
+        self.status_bar.setValue(0)
+        self.no_face_count = 0
+        self.mask_is_on = False
+        self.person_name = ""
+        self.mask_status_label.setText("")
+
+    def obstacle_detected(self, state):
+        try:
+            if self.status_bar.value() == 66:
+                m = MLX90614()
+                temp = m.get_obj_temp()
+                if 35.5 < temp < 37.5:
+                    self.person_name_label.setText(f"{temp}") 
+                    for _ in range(3):
+                        time.sleep(0.5)
+                        pixels.fill((0, 255, 0))
+                        time.sleep((0, 0, 0))
+                        pixels.fill((0, 255, 0))
+                    self.reset()
+                
+        except Exception as e:
+            print("[ERROR] No mlx90614 found")
+            quit()
+        
 
     def change_mask_status(self, mask):
         if mask:
@@ -242,16 +294,13 @@ class MaskAndFaceRecognitionWindow(DetectionWindow):
         if self.mask_is_on and not mask:
             self.status_bar.setValue(66)
             self.mask_status_label.setText("Поднесите руку к термометру")
+            self.person_name_label.setText(self.person_name)
 
     def face_count(self, count):
         if not count:
             self.no_face_count += 1
             if self.no_face_count >= self.fps:
-                self.status_bar.setValue(0)
-                self.no_face_count = 0
-                self.mask_is_on = False
-                self.person_name = ""
-                self.mask_status_label.setText("")
+                self.reset()
         else:
             self.no_face_count = 0
 
